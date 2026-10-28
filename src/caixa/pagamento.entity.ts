@@ -22,6 +22,9 @@ export class PagamentoEntity {
   @Column({ default: 'PENDENTE' })
   status: StatusPagamento;
 
+  @Column({ name: 'mercado_pago_order_id', type: 'varchar', nullable: true })
+  mercadoPagoOrderId: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

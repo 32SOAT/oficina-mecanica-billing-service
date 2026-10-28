@@ -1,7 +1,7 @@
 {
   "name": "oficina-mecanica-billing-service",
   "version": "0.0.1",
-  "description": "Dono de orçamento, aprovação e pagamento. A cobrança será integrada ao Mercado Pago.",
+  "description": "Dono de orçamento, aprovação e pagamento no Mercado Pago.",
   "private": true,
   "license": "MIT",
   "scripts": {

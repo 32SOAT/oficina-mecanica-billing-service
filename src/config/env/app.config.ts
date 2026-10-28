@@ -25,4 +25,7 @@ export const envValidationSchema = Joi.object({
   POSTGRES_PASSWORD: Joi.string().default('oficina123'),
   POSTGRES_DB: Joi.string().default('oficina_billing'),
   SAGA_TOKEN: Joi.string().default('oficina-local'),
+  MERCADOPAGO_ACCESS_TOKEN: Joi.string().allow('').optional(),
+  MERCADOPAGO_PUBLIC_KEY: Joi.string().allow('').optional(),
+  MERCADOPAGO_POLL_INTERVAL_MS: Joi.number().min(5000).default(600000),
 });

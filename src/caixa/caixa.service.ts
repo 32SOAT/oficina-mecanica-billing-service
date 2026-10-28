@@ -1,20 +1,32 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import {
+  CriarOrderInput,
+  MERCADO_PAGO_ORDERS,
+  MercadoPagoOrders,
+  statusLocalDaOrder,
+} from './mercado-pago-order';
 import { OrcamentoEntity, StatusOrcamento } from './orcamento.entity';
 import { PagamentoEntity, StatusPagamento } from './pagamento.entity';
 
 @Injectable()
 export class CaixaService {
+  private readonly logger = new Logger(CaixaService.name);
+
   constructor(
     @InjectRepository(OrcamentoEntity)
     private readonly orcamentos: Repository<OrcamentoEntity>,
     @InjectRepository(PagamentoEntity)
     private readonly pagamentos: Repository<PagamentoEntity>,
+    @Inject(MERCADO_PAGO_ORDERS)
+    private readonly mercadoPago: MercadoPagoOrders,
   ) {}
 
   async gerarOrcamento(
@@ -61,10 +73,62 @@ export class CaixaService {
     return this.mudarPagamento(osId, 'RECUSADO', 'APROVADO');
   }
 
+  async cobrar(
+    osId: string,
+    cobranca: Omit<CriarOrderInput, 'osId' | 'valor'>,
+  ): Promise<PagamentoEntity> {
+    const pagamento = await this.consultarPagamento(osId);
+    if (pagamento.status === 'APROVADO') return pagamento;
+    const order = await this.mercadoPago.criarOrder({
+      osId,
+      valor: Number(pagamento.valorTotal).toFixed(2),
+      ...cobranca,
+    });
+    pagamento.mercadoPagoOrderId = order.id;
+    pagamento.status = statusLocalDaOrder(order);
+    return this.pagamentos.save(pagamento);
+  }
+
   async consultarPagamento(osId: string): Promise<PagamentoEntity> {
     const pagamento = await this.pagamentos.findOne({ where: { osId } });
     if (!pagamento) throw new NotFoundException('Pagamento não encontrado');
+    if (pagamento.status === 'PENDENTE' && pagamento.mercadoPagoOrderId) {
+      await this.atualizarPeloMercadoPago(pagamento);
+    }
     return pagamento;
+  }
+
+  async sincronizarPagamentosPendentes(): Promise<void> {
+    if (!process.env.MERCADOPAGO_ACCESS_TOKEN) return;
+    const pendentes = await this.pagamentos.find({
+      where: { status: 'PENDENTE' },
+    });
+    for (const pagamento of pendentes) {
+      if (!pagamento.mercadoPagoOrderId) continue;
+      await this.atualizarPeloMercadoPago(pagamento);
+    }
+  }
+
+  private async atualizarPeloMercadoPago(
+    pagamento: PagamentoEntity,
+  ): Promise<void> {
+    if (!pagamento.mercadoPagoOrderId || pagamento.status !== 'PENDENTE') {
+      return;
+    }
+    try {
+      const order = await this.mercadoPago.consultarOrder(
+        pagamento.mercadoPagoOrderId,
+      );
+      const status = statusLocalDaOrder(order);
+      if (status === pagamento.status) return;
+      pagamento.status = status;
+      await this.pagamentos.save(pagamento);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'erro';
+      this.logger.warn(
+        `Não foi possível consultar a order ${pagamento.mercadoPagoOrderId}: ${message}`,
+      );
+    }
   }
 
   private async mudarOrcamento(
