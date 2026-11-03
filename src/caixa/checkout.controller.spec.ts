@@ -5,6 +5,21 @@ import {
 import { CheckoutController } from './checkout.controller';
 import { CaixaService } from './caixa.service';
 
+function respostaHtml(): {
+  type: jest.Mock;
+  send: jest.Mock;
+  html: () => string;
+} {
+  let corpo = '';
+  return {
+    type: jest.fn().mockReturnThis(),
+    send: jest.fn((body: string) => {
+      corpo = body;
+    }),
+    html: () => corpo,
+  };
+}
+
 describe('CheckoutController', () => {
   const caixa = {
     consultarPagamento: jest.fn(),
@@ -21,10 +36,7 @@ describe('CheckoutController', () => {
       valorTotal: '48.5',
       status: 'PENDENTE',
     });
-    const response = {
-      type: jest.fn().mockReturnThis(),
-      send: jest.fn(),
-    };
+    const response = respostaHtml();
 
     await controller.checkout(
       '11111111-1111-4111-8111-111111111111',
@@ -32,9 +44,8 @@ describe('CheckoutController', () => {
     );
 
     expect(response.type).toHaveBeenCalledWith('html');
-    const html = String(response.send.mock.calls[0]?.[0]);
-    expect(html).toContain('cardPayment');
-    expect(html).toContain('<p id="resultado"></p>');
+    expect(response.html()).toContain('cardPayment');
+    expect(response.html()).toContain('<p id="resultado"></p>');
   });
 
   it('says the payment is waiting when Mercado Pago has not answered yet', async () => {
@@ -43,21 +54,17 @@ describe('CheckoutController', () => {
       status: 'PENDENTE',
       mercadoPagoOrderId: 'ORD01',
     });
-    const response = {
-      type: jest.fn().mockReturnThis(),
-      send: jest.fn(),
-    };
+    const response = respostaHtml();
 
     await controller.checkout(
       '11111111-1111-4111-8111-111111111111',
       response as never,
     );
 
-    const html = String(response.send.mock.calls[0]?.[0]);
-    expect(html).toContain(
+    expect(response.html()).toContain(
       '<p id="resultado">Pagamento pendente. Aguardando o retorno do Mercado Pago.</p>',
     );
-    expect(html).toContain('cardPayment');
+    expect(response.html()).toContain('cardPayment');
   });
 
   it('rejects a charge without the card token', async () => {
@@ -83,21 +90,17 @@ describe('CheckoutController', () => {
       status: 'RECUSADO',
       mercadoPagoOrderId: 'ORD02',
     });
-    const response = {
-      type: jest.fn().mockReturnThis(),
-      send: jest.fn(),
-    };
+    const response = respostaHtml();
 
     await controller.checkout(
       '11111111-1111-4111-8111-111111111111',
       response as never,
     );
 
-    const html = String(response.send.mock.calls[0]?.[0]);
-    expect(html).toContain(
+    expect(response.html()).toContain(
       '<p id="resultado">Pagamento recusado. Tente novamente.</p>',
     );
-    expect(html).toContain('cardPayment');
+    expect(response.html()).toContain('cardPayment');
   });
 
   it('hides the card form when the payment is already approved', async () => {
@@ -105,19 +108,15 @@ describe('CheckoutController', () => {
       valorTotal: '48.5',
       status: 'APROVADO',
     });
-    const response = {
-      type: jest.fn().mockReturnThis(),
-      send: jest.fn(),
-    };
+    const response = respostaHtml();
 
     await controller.checkout(
       '11111111-1111-4111-8111-111111111111',
       response as never,
     );
 
-    const html = String(response.send.mock.calls[0]?.[0]);
-    expect(html).toContain('já está paga');
-    expect(html).not.toContain('cardPayment');
+    expect(response.html()).toContain('já está paga');
+    expect(response.html()).not.toContain('cardPayment');
   });
 
   it('refuses the page when the public key is missing', async () => {
