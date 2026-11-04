@@ -22,7 +22,7 @@ export const envValidationSchema = Joi.object({
   POSTGRES_HOST: Joi.string().default('localhost'),
   POSTGRES_PORT: Joi.number().default(5433),
   POSTGRES_USER: Joi.string().default('oficina'),
-  POSTGRES_PASSWORD: Joi.string().default('oficina123'),
+  POSTGRES_PASSWORD: Joi.string().required(),
   POSTGRES_DB: Joi.string().default('oficina_billing'),
   SAGA_TOKEN: Joi.string().default('oficina-local'),
   MERCADOPAGO_ACCESS_TOKEN: Joi.string().allow('').optional(),

@@ -11,6 +11,8 @@ describe('Health (e2e)', () => {
   let app: INestApplication<App>;
 
   beforeEach(async () => {
+    process.env.POSTGRES_PASSWORD ??= 'test';
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [ConfigModule, CoreModule, HealthModule],
     }).compile();
