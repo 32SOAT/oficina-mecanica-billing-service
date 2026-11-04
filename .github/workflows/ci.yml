@@ -23,6 +23,8 @@ jobs:
         uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        with:
+          args: -Dsonar.organization=32soat
       - run: npm run test:e2e
       - run: npm run build
