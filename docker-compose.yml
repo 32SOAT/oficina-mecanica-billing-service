@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:16-alpine
+    ports:
+      - '5433:5432'
+    environment:
+      POSTGRES_USER: oficina
+      POSTGRES_PASSWORD: oficina123
+      POSTGRES_DB: oficina_billing
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U oficina -d oficina_billing']
+      interval: 5s
+      timeout: 5s
+      retries: 10

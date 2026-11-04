@@ -2,7 +2,9 @@ import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { AppModule } from '../src/app.module';
+import { ConfigModule } from '../src/config/config.module';
+import { CoreModule } from '../src/common/core/core.module';
+import { HealthModule } from '../src/health/module';
 import { configureApp } from '../src/common/bootstrap/configure-app';
 
 describe('Health (e2e)', () => {
@@ -10,7 +12,7 @@ describe('Health (e2e)', () => {
 
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
+      imports: [ConfigModule, CoreModule, HealthModule],
     }).compile();
 
     app = moduleFixture.createNestApplication();
