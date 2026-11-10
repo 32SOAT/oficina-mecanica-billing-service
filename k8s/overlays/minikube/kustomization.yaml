@@ -1,0 +1,33 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: oficina-mecanica
+resources:
+  - namespace.yaml
+  - postgres.yaml
+  - billing-service.yaml
+configMapGenerator:
+  - name: billing-postgres-config
+    literals:
+      - POSTGRES_DB=oficina_billing
+      - POSTGRES_USER=oficina
+  - name: billing-service-config
+    literals:
+      - NODE_ENV=production
+      - APP_PORT=3000
+      - SERVICE_NAME=billing-service
+      - POSTGRES_HOST=billing-postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=oficina_billing
+      - MERCADOPAGO_POLL_INTERVAL_MS=600000
+secretGenerator:
+  - name: billing-postgres-secret
+    literals:
+      - POSTGRES_PASSWORD=oficina-local
+  - name: billing-service-secret
+    literals:
+      - POSTGRES_USER=oficina
+      - POSTGRES_PASSWORD=oficina-local
+      - SAGA_TOKEN=oficina-local
+generatorOptions:
+  labels:
+    app.kubernetes.io/part-of: oficina-mecanica

@@ -1,0 +1,116 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oficina-mecanica-billing-service
+  labels:
+    app.kubernetes.io/name: oficina-mecanica-billing-service
+    app.kubernetes.io/part-of: oficina-mecanica
+    tags.datadoghq.com/service: oficina-mecanica-billing-service
+    tags.datadoghq.com/env: local
+    tags.datadoghq.com/version: "0.0.1"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: oficina-mecanica-billing-service
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: oficina-mecanica-billing-service
+        app.kubernetes.io/part-of: oficina-mecanica
+        tags.datadoghq.com/service: oficina-mecanica-billing-service
+        tags.datadoghq.com/env: local
+        tags.datadoghq.com/version: "0.0.1"
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - until pg_isready -h billing-postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB"; do sleep 2; done
+          envFrom:
+            - configMapRef:
+                name: billing-service-config
+            - secretRef:
+                name: billing-service-secret
+      containers:
+        - name: billing-service
+          image: oficina-mecanica-billing-service:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: DD_AGENT_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: DD_SERVICE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['tags.datadoghq.com/service']
+            - name: DD_ENV
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['tags.datadoghq.com/env']
+            - name: DD_VERSION
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['tags.datadoghq.com/version']
+            - name: DD_LOGS_INJECTION
+              value: "true"
+            - name: DD_TRACE_STARTUP_LOGS
+              value: "false"
+          envFrom:
+            - configMapRef:
+                name: billing-service-config
+            - secretRef:
+                name: billing-service-secret
+          startupProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            periodSeconds: 3
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oficina-mecanica-billing-service
+  labels:
+    app.kubernetes.io/name: oficina-mecanica-billing-service
+    app.kubernetes.io/part-of: oficina-mecanica
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: oficina-mecanica-billing-service
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+      nodePort: 30082
