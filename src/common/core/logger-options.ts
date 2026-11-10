@@ -22,7 +22,10 @@ export function getLoggerOptions(): LoggerOptions {
       censor: '[REDACTED]',
     },
   };
-  if (process.env.NODE_ENV === 'production') return options;
+  if (process.env.NODE_ENV === 'production') {
+    // Datadog reads the log status from a level label, not pino's number.
+    return { ...options, formatters: { level: (label) => ({ level: label }) } };
+  }
 
   const pretty = {
     target: nodeRequire.resolve('pino-pretty'),
