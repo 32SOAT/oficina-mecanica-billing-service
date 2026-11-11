@@ -41,7 +41,7 @@ export class SagaCommandConsumer implements OnModuleInit, OnModuleDestroy {
     void this.consume(sqs);
   }
 
-  async onModuleDestroy(): Promise<void> {
+  onModuleDestroy(): void {
     this.running = false;
     this.abortController?.abort();
     this.client.destroy();

@@ -22,12 +22,12 @@ const command = (
   }) as SagaCommandMessage;
 
 function createTransactionContext() {
-  const rows = new Map<Function, Array<Record<string, unknown>>>([
+  const rows = new Map<unknown, Array<Record<string, unknown>>>([
     [OrcamentoEntity, []],
     [PagamentoEntity, []],
     [SagaCommandEntity, []],
   ]);
-  const repositoryFor = (entity: Function) => {
+  const repositoryFor = (entity: unknown) => {
     const table = rows.get(entity)!;
     return {
       findOne: jest.fn(({ where }: { where: Record<string, unknown> }) =>

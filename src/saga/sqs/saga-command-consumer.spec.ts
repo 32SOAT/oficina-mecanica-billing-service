@@ -52,7 +52,7 @@ describe('SagaCommandConsumer', () => {
           resultsQueueUrl: 'http://localhost:4566/results.fifo',
           pollIntervalMs: 1000,
         },
-      }) as never,
+      }),
     );
 
     await consumer.processMessage({
@@ -69,7 +69,9 @@ describe('SagaCommandConsumer', () => {
 
   it('keeps the message when publishing the persisted result fails', async () => {
     const client = {
-      send: jest.fn().mockRejectedValue(new Error('SQS unavailable')),
+      send: jest
+        .fn<Promise<unknown>, [unknown]>()
+        .mockRejectedValue(new Error('SQS unavailable')),
     };
     const handler = {
       processSagaCommand: jest.fn().mockResolvedValue({
@@ -91,7 +93,7 @@ describe('SagaCommandConsumer', () => {
           resultsQueueUrl: 'results',
           pollIntervalMs: 1000,
         },
-      }) as never,
+      }),
     );
 
     await expect(
@@ -111,7 +113,7 @@ describe('SagaCommandConsumer', () => {
     const consumer = new SagaCommandConsumer(
       client as unknown as SQSClient,
       handler as never,
-      new ConfigService({ sqs: { enabled: true } }) as never,
+      new ConfigService({ sqs: { enabled: true } }),
     );
 
     await consumer.processMessage({
