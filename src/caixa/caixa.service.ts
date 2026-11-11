@@ -4,9 +4,10 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import {
   CriarOrderInput,
   MERCADO_PAGO_ORDERS,
@@ -15,6 +16,25 @@ import {
 } from './mercado-pago-order';
 import { OrcamentoEntity, StatusOrcamento } from './orcamento.entity';
 import { PagamentoEntity, StatusPagamento } from './pagamento.entity';
+import { SagaCommandEntity } from '../saga/saga-command.entity';
+import {
+  SagaCommandMessage,
+  SagaCommandType,
+  SagaResultMessage,
+} from '../saga/saga-message';
+import {
+  createSagaResult,
+  sagaCommandFingerprint,
+} from '../saga/saga-command.utils';
+
+class SagaBusinessError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
 @Injectable()
 export class CaixaService {
@@ -27,7 +47,169 @@ export class CaixaService {
     private readonly pagamentos: Repository<PagamentoEntity>,
     @Inject(MERCADO_PAGO_ORDERS)
     private readonly mercadoPago: MercadoPagoOrders,
+    @Optional()
+    @InjectDataSource()
+    private readonly dataSource?: DataSource,
   ) {}
+
+  async processSagaCommand(
+    command: SagaCommandMessage,
+  ): Promise<SagaResultMessage> {
+    if (!this.dataSource) {
+      throw new Error('DataSource indisponível para a Saga do Billing');
+    }
+
+    const fingerprint = sagaCommandFingerprint(command);
+    return this.dataSource.transaction(async (manager) => {
+      const commands = manager.getRepository(SagaCommandEntity);
+      const existing = await commands.findOne({
+        where: { commandId: command.commandId },
+      });
+      if (existing) {
+        if (existing.requestFingerprint !== fingerprint) {
+          throw new Error('commandId reutilizado com conteúdo diferente');
+        }
+        return existing.result;
+      }
+
+      let result: SagaResultMessage;
+      try {
+        await this.applySagaCommand(manager, command);
+        result = createSagaResult(command, {
+          outcome: 'CONCLUIDA',
+          payload: {},
+        });
+      } catch (error) {
+        if (!(error instanceof SagaBusinessError)) throw error;
+        result = createSagaResult(command, {
+          outcome: 'FALHA',
+          payload: {
+            code: error.code,
+            message: error.message,
+            retryable: false,
+          },
+        });
+      }
+
+      await commands.save(
+        commands.create({
+          commandId: command.commandId,
+          requestFingerprint: fingerprint,
+          result,
+        }),
+      );
+      return result;
+    });
+  }
+
+  private async applySagaCommand(
+    manager: EntityManager,
+    command: SagaCommandMessage,
+  ): Promise<void> {
+    switch (command.type) {
+      case SagaCommandType.BillingQuoteGenerate: {
+        const repository = manager.getRepository(OrcamentoEntity);
+        const existing = await repository.findOne({
+          where: { osId: command.osId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (existing) {
+          this.assertSameTotal(existing.valorTotal, command.payload.valorTotal);
+          if (existing.status !== 'GERADO') {
+            throw new SagaBusinessError(
+              'TRANSICAO_ORCAMENTO_INCOMPATIVEL',
+              'Orçamento já saiu do estado de geração',
+            );
+          }
+          return;
+        }
+        await repository.save(
+          repository.create({
+            osId: command.osId,
+            valorTotal: command.payload.valorTotal,
+            status: 'GERADO',
+          }),
+        );
+        return;
+      }
+      case SagaCommandType.BillingQuoteApprove:
+      case SagaCommandType.BillingQuoteReject: {
+        const target: StatusOrcamento =
+          command.type === SagaCommandType.BillingQuoteApprove
+            ? 'APROVADO'
+            : 'REPROVADO';
+        const opposite: StatusOrcamento =
+          target === 'APROVADO' ? 'REPROVADO' : 'APROVADO';
+        const repository = manager.getRepository(OrcamentoEntity);
+        const quote = await repository.findOne({
+          where: { osId: command.osId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!quote) {
+          throw new SagaBusinessError(
+            'ORCAMENTO_NAO_ENCONTRADO',
+            'Orçamento não encontrado para a OS',
+          );
+        }
+        if (quote.status === opposite) {
+          throw new SagaBusinessError(
+            'TRANSICAO_ORCAMENTO_INCOMPATIVEL',
+            'Orçamento já recebeu a decisão oposta',
+          );
+        }
+        if (quote.status === target) return;
+        if (quote.status !== 'GERADO') {
+          throw new SagaBusinessError(
+            'TRANSICAO_ORCAMENTO_INCOMPATIVEL',
+            'Estado atual do orçamento não permite essa decisão',
+          );
+        }
+        quote.status = target;
+        await repository.save(quote);
+        return;
+      }
+      case SagaCommandType.BillingPaymentOpen: {
+        const repository = manager.getRepository(PagamentoEntity);
+        const existing = await repository.findOne({
+          where: { osId: command.osId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (existing) {
+          this.assertSameTotal(existing.valorTotal, command.payload.valorTotal);
+          if (existing.status !== 'PENDENTE') {
+            throw new SagaBusinessError(
+              'TRANSICAO_PAGAMENTO_INCOMPATIVEL',
+              'Pagamento já saiu do estado pendente',
+            );
+          }
+          return;
+        }
+        await repository.save(
+          repository.create({
+            osId: command.osId,
+            valorTotal: command.payload.valorTotal,
+            status: 'PENDENTE',
+            mercadoPagoOrderId: null,
+          }),
+        );
+        return;
+      }
+      default:
+        throw new SagaBusinessError(
+          'COMANDO_NAO_SUPORTADO',
+          'Comando não suportado pelo Billing',
+        );
+    }
+  }
+
+  private assertSameTotal(existing: number, requested: number): void {
+    if (Number(existing) !== requested) {
+      throw new SagaBusinessError(
+        'VALOR_TOTAL_DIVERGENTE',
+        'Valor total difere do registro existente',
+      );
+    }
+  }
 
   async gerarOrcamento(
     osId: string,

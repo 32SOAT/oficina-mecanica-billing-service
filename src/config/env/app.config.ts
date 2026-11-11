@@ -28,4 +28,17 @@ export const envValidationSchema = Joi.object({
   MERCADOPAGO_ACCESS_TOKEN: Joi.string().allow('').optional(),
   MERCADOPAGO_PUBLIC_KEY: Joi.string().allow('').optional(),
   MERCADOPAGO_POLL_INTERVAL_MS: Joi.number().min(5000).default(600000),
+  SQS_WORKER_ENABLED: Joi.boolean().default(false),
+  SQS_ENDPOINT_URL: Joi.string().uri().allow('').optional(),
+  SQS_REGION: Joi.string().default('us-east-1'),
+  SQS_COMMANDS_QUEUE_URL: Joi.when('SQS_WORKER_ENABLED', {
+    is: true,
+    then: Joi.string().uri().required(),
+    otherwise: Joi.string().uri().optional(),
+  }),
+  SQS_RESULTS_QUEUE_URL: Joi.when('SQS_WORKER_ENABLED', {
+    is: true,
+    then: Joi.string().uri().required(),
+    otherwise: Joi.string().uri().optional(),
+  }),
 });
