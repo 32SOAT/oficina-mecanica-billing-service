@@ -178,4 +178,41 @@ describe('CaixaService Saga commands', () => {
     expect(context.rows.get(PagamentoEntity)).toHaveLength(1);
     expect(context.rows.get(PagamentoEntity)?.[0].valorTotal).toBe(123.45);
   });
+
+  it('does not reopen an approved payment with a new Saga command', async () => {
+    const context = createTransactionContext();
+    const service = new CaixaService(
+      {} as never,
+      {} as never,
+      { criarOrder: jest.fn(), consultarOrder: jest.fn() },
+      context.dataSource as never,
+    );
+    context.rows.get(PagamentoEntity)?.push({
+      osId: command().osId,
+      valorTotal: 123.45,
+      status: 'APROVADO',
+      mercadoPagoOrderId: 'paid-order',
+    });
+
+    const result = await service.processSagaCommand(
+      command({
+        type: 'BILLING_PAYMENT_OPEN',
+        payload: { valorTotal: 123.45 },
+      }),
+    );
+
+    expect(result.outcome).toBe('FALHA');
+    if (result.outcome === 'FALHA') {
+      expect(result.payload.code).toBe('TRANSICAO_PAGAMENTO_INCOMPATIVEL');
+      expect(result.payload.retryable).toBe(false);
+    }
+    expect(context.rows.get(PagamentoEntity)).toEqual([
+      {
+        osId: command().osId,
+        valorTotal: 123.45,
+        status: 'APROVADO',
+        mercadoPagoOrderId: 'paid-order',
+      },
+    ]);
+  });
 });

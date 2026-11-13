@@ -21,6 +21,90 @@ const command: SagaCommandMessage = {
 };
 
 describe('SagaCommandConsumer', () => {
+  it('does not start polling when the worker is disabled', () => {
+    const client = { send: jest.fn(), destroy: jest.fn() };
+    const consumer = new SagaCommandConsumer(
+      client as unknown as SQSClient,
+      { processSagaCommand: jest.fn() } as never,
+      new ConfigService({ sqs: { enabled: false } }),
+    );
+
+    consumer.onModuleInit();
+    consumer.onModuleDestroy();
+
+    expect(client.send).not.toHaveBeenCalled();
+    expect(client.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { commandQueueUrl: undefined, resultsQueueUrl: 'results' },
+    { commandQueueUrl: 'commands', resultsQueueUrl: undefined },
+  ])('rejects enabled workers without both queue URLs', (urls) => {
+    const client = { send: jest.fn() };
+    const consumer = new SagaCommandConsumer(
+      client as unknown as SQSClient,
+      { processSagaCommand: jest.fn() } as never,
+      new ConfigService({ sqs: { enabled: true, ...urls } }),
+    );
+
+    expect(() => consumer.onModuleInit()).toThrow(/URLs SQS/);
+    expect(client.send).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { Body: undefined, ReceiptHandle: 'receipt' },
+    { Body: JSON.stringify(command), ReceiptHandle: undefined },
+  ])('does not process a message without body and receipt', async (message) => {
+    const client = { send: jest.fn() };
+    const handler = { processSagaCommand: jest.fn() };
+    const consumer = new SagaCommandConsumer(
+      client as unknown as SQSClient,
+      handler as never,
+      new ConfigService({ sqs: { enabled: true } }),
+    );
+
+    await consumer.processMessage(message);
+
+    expect(handler.processSagaCommand).not.toHaveBeenCalled();
+    expect(client.send).not.toHaveBeenCalled();
+  });
+
+  it('leaves malformed JSON on the queue for redrive', async () => {
+    const client = { send: jest.fn() };
+    const handler = { processSagaCommand: jest.fn() };
+    const consumer = new SagaCommandConsumer(
+      client as unknown as SQSClient,
+      handler as never,
+      new ConfigService({ sqs: { enabled: true } }),
+    );
+
+    await consumer.processMessage({ Body: '{', ReceiptHandle: 'receipt' });
+
+    expect(handler.processSagaCommand).not.toHaveBeenCalled();
+    expect(client.send).not.toHaveBeenCalled();
+  });
+
+  it('retains the command if the participant cannot persist its result', async () => {
+    const client = { send: jest.fn() };
+    const handler = {
+      processSagaCommand: jest
+        .fn()
+        .mockRejectedValue(new Error('database unavailable')),
+    };
+    const consumer = new SagaCommandConsumer(
+      client as unknown as SQSClient,
+      handler as never,
+      new ConfigService({ sqs: { enabled: true } }),
+    );
+
+    await expect(
+      consumer.processMessage({
+        Body: JSON.stringify(command),
+        ReceiptHandle: 'receipt',
+      }),
+    ).rejects.toThrow('database unavailable');
+    expect(client.send).not.toHaveBeenCalled();
+  });
   it('publishes the result before deleting the command', async () => {
     const calls: string[] = [];
     const client = {
