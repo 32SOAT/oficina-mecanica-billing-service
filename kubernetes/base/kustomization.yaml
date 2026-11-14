@@ -4,6 +4,7 @@ namespace: oficina-mecanica
 resources:
   - deployment.yaml
   - service.yaml
+  - checkout-service.yaml
   - service-account.yaml
   - postgres-service.yaml
   - postgres-statefulset.yaml

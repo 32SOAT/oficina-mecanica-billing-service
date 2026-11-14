@@ -31,7 +31,7 @@ No Kubernetes, `kubernetes/base` cria `oficina-billing-postgres` com PVC, creden
 
 Os recursos AWS próprios e a ordem de configuração estão em [infra/aws/README.md](infra/aws/README.md). Cada ambiente tem state Terraform e ECR separados; execute o apply apenas após revisão da infraestrutura.
 
-`.github/workflows/deploy.yml` valida lint/cobertura/build, publica a imagem no ECR e aplica os manifests em `homolog`/`main` quando `DEPLOY_ENABLED=true` nas variables do repositório. Configure `AWS_REGION`, `AWS_ACCOUNT_ID`, `EKS_CLUSTER_NAME`, `DEPLOY_ROLE_ARN`, `ECR_REPOSITORY_URL`, `SQS_COMMANDS_QUEUE_URL` e `SQS_RESULTS_QUEUE_URL` como variables. Configure `POSTGRES_USER`, `POSTGRES_PASSWORD` e `SAGA_TOKEN` como secrets; as credenciais de teste do Mercado Pago são opcionais para subir a API, mas necessárias para cobrar via checkout atual. ECR, roles de deploy e Pod Identity, cluster, namespace e filas são pré-requisitos. A role Pod Identity vinculada ao ServiceAccount `oficina-billing` deve ter acesso somente às filas do Billing. O Service Kubernetes é interno (`ClusterIP`); a rota pública de checkout continua pertencendo ao API Gateway.
+`.github/workflows/deploy.yml` valida lint/cobertura/build, publica a imagem no ECR e aplica os manifests em `homolog`/`main` quando `DEPLOY_ENABLED=true` nas variables do repositório. Configure `AWS_REGION`, `AWS_ACCOUNT_ID`, `EKS_CLUSTER_NAME`, `DEPLOY_ROLE_ARN`, `ECR_REPOSITORY_URL`, `SQS_COMMANDS_QUEUE_URL` e `SQS_RESULTS_QUEUE_URL` como variables. Configure `POSTGRES_USER`, `POSTGRES_PASSWORD` e `SAGA_TOKEN` como secrets; as credenciais de teste do Mercado Pago são opcionais para subir a API, mas necessárias para cobrar via checkout atual. ECR, roles de deploy e Pod Identity, cluster, namespace e filas são pré-requisitos. A role Pod Identity vinculada ao ServiceAccount `oficina-billing` deve ter acesso somente às filas do Billing. O Service interno continua `ClusterIP`; o deploy também cria `oficina-billing-checkout` com NLB e publica `/oficina/<ambiente>/services/billing-checkout-nlb-hostname` no SSM após verificar o health externo. O API Gateway da plataforma encaminha somente checkout e cobrança a esse NLB.
 
 ## Mensageria da Saga
 
@@ -54,3 +54,5 @@ npm run start:dev
 - Cobrança, chamada pelo formulário: `POST /api/v1/pagamentos/:osId/cobrar`
 
 Preencha `MERCADOPAGO_ACCESS_TOKEN` e `MERCADOPAGO_PUBLIC_KEY` no `.env` com as credenciais de teste. O Access Token de teste começa com `APP_USR`. A consulta síncrona de pagamento feita pela OS durante a entrega envia `x-saga-token: oficina-local`. Os comandos da Saga chegam pelo worker SQS; a página de pagamento não usa esse header.
+
+Para o BDD distribuído, `MERCADOPAGO_API_BASE_URL` permite apontar o cliente HTTP para um mock local do provedor; o padrão continua `https://api.mercadopago.com`. A variável não é configurada pelo deploy de produção. A suíte completa e o CI estão descritos no README da OS.

@@ -18,11 +18,17 @@ type OrderApi = {
 
 @Injectable()
 export class MercadoPagoClient {
+  private get baseUrl(): string {
+    return (
+      process.env.MERCADOPAGO_API_BASE_URL ?? 'https://api.mercadopago.com'
+    );
+  }
+
   async criarOrder(input: CriarOrderInput): Promise<OrderCriada> {
     const accessToken = this.accessToken();
     let response: Response;
     try {
-      response = await fetch('https://api.mercadopago.com/v1/orders', {
+      response = await fetch(`${this.baseUrl}/v1/orders`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -69,7 +75,7 @@ export class MercadoPagoClient {
     let response: Response;
     try {
       response = await fetch(
-        `https://api.mercadopago.com/v1/orders/${encodeURIComponent(orderId)}`,
+        `${this.baseUrl}/v1/orders/${encodeURIComponent(orderId)}`,
         { headers: { Authorization: `Bearer ${accessToken}` } },
       );
     } catch {

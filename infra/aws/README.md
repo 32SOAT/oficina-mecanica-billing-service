@@ -10,3 +10,5 @@ terraform plan -var='aws_region=<region>' -var='environment=<homologacao-or-prod
 ```
 
 After review and an authorized apply, copy only `ecr_repository_url`, `deployer_role_arn` to the corresponding GitHub Environment variables `ECR_REPOSITORY_URL`, `DEPLOY_ROLE_ARN`. Set `AWS_REGION`, `AWS_ACCOUNT_ID`, `EKS_CLUSTER_NAME` and queue URLs there too. The namespace `oficina-mecanica` must exist. Enable repository variable `DEPLOY_ENABLED=true` only after the environment is configured. Do not run this root from the app deployment workflow; it has a separate state and approval lifecycle.
+
+The deploy role can publish only `/oficina/<environment>/services/billing-checkout-nlb-hostname` in SSM. The deployment creates a separate public NLB for checkout, checks its health, and publishes the hostname. The platform Terraform root reads it for the two public payment routes; it does not create or own the parameter.

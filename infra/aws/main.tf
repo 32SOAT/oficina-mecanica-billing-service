@@ -2,9 +2,10 @@ data "aws_caller_identity" "current" {}
 data "aws_eks_cluster" "target" { name = var.cluster_name }
 
 locals {
-  repository_name = "oficina-mecanica-billing-service-${var.environment}"
-  service_account = "oficina-billing"
-  github_subject  = "repo:32SOAT/oficina-mecanica-billing-service:environment:${var.environment}"
+  repository_name            = "oficina-mecanica-billing-service-${var.environment}"
+  service_account            = "oficina-billing"
+  github_subject             = "repo:32SOAT/oficina-mecanica-billing-service:environment:${var.environment}"
+  checkout_nlb_parameter_arn = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/oficina/${var.environment}/services/billing-checkout-nlb-hostname"
 }
 
 resource "aws_ecr_repository" "service" {
@@ -39,7 +40,8 @@ resource "aws_iam_role_policy" "deployer" {
     Statement = [
       { Effect = "Allow", Action = ["eks:DescribeCluster"], Resource = [data.aws_eks_cluster.target.arn] },
       { Effect = "Allow", Action = ["ecr:GetAuthorizationToken"], Resource = ["*"] },
-      { Effect = "Allow", Action = ["ecr:BatchCheckLayerAvailability", "ecr:CompleteLayerUpload", "ecr:DescribeImages", "ecr:InitiateLayerUpload", "ecr:PutImage", "ecr:UploadLayerPart"], Resource = [aws_ecr_repository.service.arn] }
+      { Effect = "Allow", Action = ["ecr:BatchCheckLayerAvailability", "ecr:CompleteLayerUpload", "ecr:DescribeImages", "ecr:InitiateLayerUpload", "ecr:PutImage", "ecr:UploadLayerPart"], Resource = [aws_ecr_repository.service.arn] },
+      { Effect = "Allow", Action = ["ssm:PutParameter"], Resource = [local.checkout_nlb_parameter_arn] }
     ]
   })
 }
