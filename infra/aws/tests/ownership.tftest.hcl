@@ -6,9 +6,9 @@ override_data {
 }
 
 override_resource {
-  target = aws_ecr_repository.service
+  target          = aws_ecr_repository.service
   override_during = plan
-  values = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/oficina-mecanica-billing-service-homologacao" }
+  values          = { arn = "arn:aws:ecr:us-east-1:123456789012:repository/oficina-mecanica-billing-service-homologacao" }
 }
 
 override_data {
