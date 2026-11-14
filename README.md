@@ -25,6 +25,12 @@ Um pagamento que continua `PENDENTE` é consultado de novo no Mercado Pago a cad
 
 Postgres `oficina_billing` neste repositório, porta **5433**. O schema é criado na subida da aplicação. Não há conexão com o banco da OS nem com o da execução.
 
+No Kubernetes, `kubernetes/base` cria `oficina-billing-postgres` com PVC, credenciais e política de rede próprios. O serviço usa apenas esse banco; nenhuma credencial da OS é compartilhada.
+
+## Deploy Kubernetes independente
+
+`.github/workflows/deploy.yml` valida lint/cobertura/build, publica a imagem no ECR e aplica os manifests em `homolog`/`main` quando `DEPLOY_ENABLED=true` nas variables do repositório. Configure `AWS_REGION`, `AWS_ACCOUNT_ID`, `EKS_CLUSTER_NAME`, `DEPLOY_ROLE_ARN`, `SERVICE_ROLE_ARN`, `ECR_REPOSITORY_URL`, `SQS_COMMANDS_QUEUE_URL` e `SQS_RESULTS_QUEUE_URL` como variables. Configure `POSTGRES_USER`, `POSTGRES_PASSWORD` e `SAGA_TOKEN` como secrets; as credenciais de teste do Mercado Pago são opcionais para subir a API, mas necessárias para cobrar via checkout atual. ECR, roles OIDC, cluster, namespace e filas são pré-requisitos. A role do ServiceAccount `oficina-billing` deve ter acesso somente às filas do Billing. O Service Kubernetes é interno (`ClusterIP`); a rota pública de checkout continua pertencendo ao API Gateway.
+
 ## Mensageria da Saga
 
 O worker SQS aceita geração/aprovação/reprovação de orçamento e abertura de pagamento pendente. `commandId`, alteração do orçamento/pagamento e resultado ficam persistidos na mesma transação Postgres. Em uma redelivery ele reutiliza o resultado gravado; só confirma a mensagem depois de publicar o resultado na fila da OS. Mensagens inválidas seguem para a DLQ pela política de redrive.

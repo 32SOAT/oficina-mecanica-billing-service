@@ -1,0 +1,71 @@
+name: Deploy Kubernetes
+on:
+  push:
+    branches: [homolog, main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deploy:
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'producao' || 'homologacao' }}
+    concurrency:
+      group: deploy-billing-${{ github.ref_name }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+      EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
+      DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
+      SERVICE_ROLE_ARN: ${{ vars.SERVICE_ROLE_ARN }}
+      ECR_REPOSITORY_URL: ${{ vars.ECR_REPOSITORY_URL }}
+      POSTGRES_HOST: oficina-billing-postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: oficina_billing
+      SQS_COMMANDS_QUEUE_URL: ${{ vars.SQS_COMMANDS_QUEUE_URL }}
+      SQS_RESULTS_QUEUE_URL: ${{ vars.SQS_RESULTS_QUEUE_URL }}
+      SQS_WORKER_ENABLED: "true"
+      MERCADOPAGO_POLL_INTERVAL_MS: "600000"
+      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      SAGA_TOKEN: ${{ secrets.SAGA_TOKEN }}
+      MERCADOPAGO_ACCESS_TOKEN: ${{ secrets.MERCADOPAGO_ACCESS_TOKEN }}
+      MERCADOPAGO_PUBLIC_KEY: ${{ secrets.MERCADOPAGO_PUBLIC_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint:check
+      - run: npm run test:cov -- --runInBand
+      - run: npm run build
+      - name: Validate deployment inputs
+        run: |
+          set -Eeuo pipefail
+          for key in AWS_REGION AWS_ACCOUNT_ID EKS_CLUSTER_NAME DEPLOY_ROLE_ARN ECR_REPOSITORY_URL SERVICE_ROLE_ARN; do
+            [[ -n "${!key:-}" ]] || { echo "Missing $key" >&2; exit 1; }
+          done
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ env.AWS_ACCOUNT_ID }}
+      - uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and publish immutable image
+        run: |
+          set -Eeuo pipefail
+          docker build -t "$ECR_REPOSITORY_URL:$GITHUB_SHA" .
+          docker push "$ECR_REPOSITORY_URL:$GITHUB_SHA"
+          digest="$(aws ecr describe-images --repository-name "${ECR_REPOSITORY_URL##*/}" --image-ids "imageTag=$GITHUB_SHA" --query 'imageDetails[0].imageDigest' --output text)"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || exit 1
+          echo "IMAGE_REF=$ECR_REPOSITORY_URL@$digest" >> "$GITHUB_ENV"
+      - name: Deploy service and verify health
+        run: |
+          aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+          bash scripts/deploy-kubernetes.sh
