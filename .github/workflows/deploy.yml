@@ -60,9 +60,10 @@ jobs:
       - name: Build and publish immutable image
         run: |
           set -Eeuo pipefail
-          docker build -t "$ECR_REPOSITORY_URL:$GITHUB_SHA" .
-          docker push "$ECR_REPOSITORY_URL:$GITHUB_SHA"
-          digest="$(aws ecr describe-images --repository-name "${ECR_REPOSITORY_URL##*/}" --image-ids "imageTag=$GITHUB_SHA" --query 'imageDetails[0].imageDigest' --output text)"
+          image_tag="sha-$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          docker build -t "$ECR_REPOSITORY_URL:$image_tag" .
+          docker push "$ECR_REPOSITORY_URL:$image_tag"
+          digest="$(aws ecr describe-images --repository-name "${ECR_REPOSITORY_URL##*/}" --image-ids "imageTag=$image_tag" --query 'imageDetails[0].imageDigest' --output text)"
           [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || exit 1
           echo "IMAGE_REF=$ECR_REPOSITORY_URL@$digest" >> "$GITHUB_ENV"
       - name: Deploy service and verify health
