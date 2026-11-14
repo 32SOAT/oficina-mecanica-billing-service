@@ -12,8 +12,6 @@ run "service_owns_its_resources" {
     environment              = "homologacao"
     cluster_name             = "oficina-mecanica-homologacao"
     github_oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
-    eks_oidc_provider_arn    = "arn:aws:iam::123456789012:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/EXAMPLE"
-    eks_oidc_issuer_url      = "https://oidc.eks.us-east-1.amazonaws.com/id/EXAMPLE"
   }
   assert {
     condition     = aws_ecr_repository.service.name == "oficina-mecanica-billing-service-homologacao"
@@ -24,7 +22,7 @@ run "service_owns_its_resources" {
     error_message = "Only this repository and environment may assume deploy role"
   }
   assert {
-    condition     = strcontains(aws_iam_role.runtime.assume_role_policy, "system:serviceaccount:oficina-mecanica:oficina-billing")
+    condition     = aws_eks_pod_identity_association.runtime.service_account == "oficina-billing" && strcontains(aws_iam_role.runtime.assume_role_policy, "pods.eks.amazonaws.com")
     error_message = "Runtime role must be bound to its own service account"
   }
 }

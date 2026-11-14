@@ -20,8 +20,6 @@ for key in POSTGRES_USER POSTGRES_PASSWORD SAGA_TOKEN MERCADOPAGO_ACCESS_TOKEN M
 kubectl -n "$namespace" create configmap "$service_name-config" --from-env-file="$work_dir/config.env" --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n "$namespace" create secret generic "$service_name-secret" --from-env-file="$work_dir/secret.env" --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n "$namespace" apply -f "$base_dir/service-account.yaml"
-: "${SERVICE_ROLE_ARN:?SERVICE_ROLE_ARN is required for SQS and DynamoDB}"
-kubectl -n "$namespace" annotate serviceaccount "$service_name" eks.amazonaws.com/role-arn="$SERVICE_ROLE_ARN" --overwrite
 kubectl -n "$namespace" apply -f "$base_dir/postgres-service.yaml"
 kubectl -n "$namespace" apply -f "$base_dir/postgres-statefulset.yaml"
 kubectl -n "$namespace" apply -f "$base_dir/postgres-network-policy.yaml"

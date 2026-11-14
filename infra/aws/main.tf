@@ -5,7 +5,6 @@ locals {
   repository_name = "oficina-mecanica-billing-service-${var.environment}"
   service_account = "oficina-billing"
   github_subject  = "repo:32SOAT/oficina-mecanica-billing-service:environment:${var.environment}"
-  eks_issuer      = trimprefix(var.eks_oidc_issuer_url, "https://")
 }
 
 resource "aws_ecr_repository" "service" {
@@ -68,12 +67,15 @@ resource "aws_iam_role" "runtime" {
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
-      Action    = "sts:AssumeRoleWithWebIdentity"
-      Principal = { Federated = var.eks_oidc_provider_arn }
-      Condition = { StringEquals = {
-        "${local.eks_issuer}:aud" = "sts.amazonaws.com"
-        "${local.eks_issuer}:sub" = "system:serviceaccount:oficina-mecanica:${local.service_account}"
-      } }
+      Action    = ["sts:AssumeRole", "sts:TagSession"]
+      Principal = { Service = "pods.eks.amazonaws.com" }
     }]
   })
+}
+
+resource "aws_eks_pod_identity_association" "runtime" {
+  cluster_name    = var.cluster_name
+  namespace       = "oficina-mecanica"
+  service_account = local.service_account
+  role_arn        = aws_iam_role.runtime.arn
 }
