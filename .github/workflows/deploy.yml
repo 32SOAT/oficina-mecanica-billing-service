@@ -17,6 +17,7 @@ jobs:
       contents: read
       id-token: write
     env:
+      DEPLOY_ENV: ${{ github.ref_name == 'main' && 'producao' || 'homologacao' }}
       AWS_REGION: ${{ vars.AWS_REGION }}
       AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
       EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}

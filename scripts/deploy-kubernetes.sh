@@ -6,7 +6,7 @@ namespace=oficina-mecanica
 base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../kubernetes/base" && pwd)"
 : "${IMAGE_REF:?IMAGE_REF is required}"
 [[ "$IMAGE_REF" =~ ^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/[a-z0-9/_-]+@sha256:[0-9a-f]{64}$ ]] || { echo 'Invalid ECR image digest' >&2; exit 1; }
-[[ "$IMAGE_REF" == */oficina-mecanica-billing-service@sha256:* ]] || { echo 'ECR repository does not belong to this service' >&2; exit 1; }
+[[ "$IMAGE_REF" == */oficina-mecanica-billing-service-"${DEPLOY_ENV:?DEPLOY_ENV is required}"@sha256:* ]] || { echo 'ECR repository does not belong to this service' >&2; exit 1; }
 for required in POSTGRES_HOST POSTGRES_PORT POSTGRES_DB SQS_COMMANDS_QUEUE_URL SQS_RESULTS_QUEUE_URL SQS_WORKER_ENABLED MERCADOPAGO_POLL_INTERVAL_MS POSTGRES_USER POSTGRES_PASSWORD SAGA_TOKEN; do
   [[ -n "${!required:-}" ]] || { echo "Missing deployment variable: $required" >&2; exit 1; }
 done

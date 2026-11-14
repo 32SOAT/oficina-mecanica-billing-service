@@ -1,0 +1,25 @@
+name: Infrastructure CI
+on:
+  pull_request:
+    paths: [infra/aws/**, .github/workflows/infra-ci.yml]
+  push:
+    branches: [main, homolog]
+    paths: [infra/aws/**, .github/workflows/infra-ci.yml]
+permissions:
+  contents: read
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.1
+      - run: terraform fmt -check -recursive
+        working-directory: infra/aws
+      - run: terraform init -backend=false -input=false
+        working-directory: infra/aws
+      - run: terraform validate
+        working-directory: infra/aws
+      - run: terraform test
+        working-directory: infra/aws
