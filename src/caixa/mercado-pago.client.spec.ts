@@ -46,6 +46,31 @@ describe('MercadoPagoClient', () => {
     });
   });
 
+  it('sends test orders to the configured local payment endpoint', async () => {
+    process.env.MERCADOPAGO_API_BASE_URL = 'http://127.0.0.1:3099';
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: () => Promise.resolve({ id: 'BDD-1', status: 'processed' }),
+    } as Response);
+    try {
+      await client.criarOrder({
+        osId: 'os-1',
+        valor: '10.00',
+        token: 'bdd-approved',
+        paymentMethodId: 'visa',
+        installments: 1,
+        payerEmail: 'bdd@example.com',
+        paymentType: 'credit_card',
+      });
+      expect(fetchMock.mock.calls[0][0]).toBe(
+        'http://127.0.0.1:3099/v1/orders',
+      );
+    } finally {
+      delete process.env.MERCADOPAGO_API_BASE_URL;
+    }
+  });
+
   it('reports a refused order', async () => {
     jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: false,

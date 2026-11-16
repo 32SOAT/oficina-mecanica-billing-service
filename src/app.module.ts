@@ -4,6 +4,7 @@ import { CoreModule } from './common/core/core.module';
 import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './health/module';
 import { CaixaModule } from './caixa/caixa.module';
+import { SagaModule } from './saga/saga.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { CaixaModule } from './caixa/caixa.module';
     DatabaseModule,
     HealthModule,
     CaixaModule,
+    SagaModule,
   ],
 })
 export class AppModule {}
