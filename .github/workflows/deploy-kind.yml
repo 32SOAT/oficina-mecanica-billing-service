@@ -1,0 +1,45 @@
+name: Deploy Kubernetes (kind)
+on:
+  pull_request:
+  push:
+    branches: [homolog, main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint:check
+      - run: npm run test:cov -- --runInBand
+      - name: Build image
+        run: docker build -t oficina-mecanica-billing-service:local .
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: oficina
+      - name: Deploy to the cluster
+        # The saga queues live in the os-service overlay, so the SQS worker stays off here.
+        run: |
+          set -Eeuo pipefail
+          kind load docker-image oficina-mecanica-billing-service:local --name oficina
+          kubectl kustomize kubernetes/overlays/minikube \
+            | sed 's/SQS_WORKER_ENABLED: "true"/SQS_WORKER_ENABLED: "false"/' \
+            | kubectl apply -f -
+          kubectl -n oficina-mecanica rollout status deployment/oficina-billing --timeout=5m
+      - name: Check health inside the cluster
+        run: |
+          kubectl -n oficina-mecanica run smoke --image=curlimages/curl:8.11.1 --restart=Never --rm -i --quiet -- \
+            curl --fail --silent --show-error http://oficina-billing/api/v1/health
+      - name: Show cluster state on failure
+        if: failure()
+        run: |
+          kubectl -n oficina-mecanica get pods -o wide || true
+          kubectl -n oficina-mecanica describe pods | tail -n 80 || true
+          kubectl -n oficina-mecanica logs deployment/oficina-billing --tail=80 || true
