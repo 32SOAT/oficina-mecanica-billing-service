@@ -1,0 +1,48 @@
+# The SQS endpoint (floci) comes from the os-service minikube overlay: apply that one first.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: oficina-mecanica
+resources:
+  - namespace.yaml
+  - ../../base
+images:
+  - name: oficina-billing
+    newName: oficina-mecanica-billing-service
+    newTag: local
+configMapGenerator:
+  - name: oficina-billing-config
+    literals:
+      - NODE_ENV=production
+      - APP_PORT=3000
+      - POSTGRES_HOST=oficina-billing-postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=oficina_billing
+      - MERCADOPAGO_POLL_INTERVAL_MS=600000
+      - SQS_ENDPOINT_URL=http://floci:4566
+      - SQS_REGION=us-east-1
+      - SQS_WORKER_ENABLED=true
+      - SQS_COMMANDS_QUEUE_URL=http://floci:4566/000000000000/oficina-billing-commands.fifo
+      - SQS_RESULTS_QUEUE_URL=http://floci:4566/000000000000/oficina-os-results.fifo
+      - DD_ENV=local
+      - DD_VERSION=local
+secretGenerator:
+  - name: oficina-billing-secret
+    literals:
+      - POSTGRES_USER=oficina
+      - POSTGRES_PASSWORD=oficina-local
+      - SAGA_TOKEN=oficina-local
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - MERCADOPAGO_ACCESS_TOKEN=
+      - MERCADOPAGO_PUBLIC_KEY=
+patches:
+  - target:
+      kind: Service
+      name: oficina-billing-checkout
+    patch: |-
+      - op: replace
+        path: /spec/type
+        value: NodePort
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30082
