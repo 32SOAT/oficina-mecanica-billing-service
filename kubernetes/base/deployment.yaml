@@ -11,7 +11,7 @@ spec:
     metadata:
       labels:
         app: oficina-billing
-        tags.datadoghq.com/service: oficina-mecanica-billing-service
+        tags.datadoghq.com/service: oficina-billing
     spec:
       serviceAccountName: oficina-billing
       securityContext:
@@ -32,7 +32,7 @@ spec:
                 fieldRef:
                   fieldPath: status.hostIP
             - name: DD_SERVICE
-              value: oficina-mecanica-billing-service
+              value: oficina-billing
             - name: DD_LOGS_INJECTION
               value: "true"
           envFrom:
