@@ -1,5 +1,6 @@
 import {
   DeleteMessageCommand,
+  ReceiveMessageCommand,
   SendMessageCommand,
   SQSClient,
 } from '@aws-sdk/client-sqs';
@@ -21,7 +22,7 @@ const command: SagaCommandMessage = {
 };
 
 describe('SagaCommandConsumer', () => {
-  it('does not start polling when the worker is disabled', () => {
+  it('does not start polling when the worker is disabled', async () => {
     const client = { send: jest.fn(), destroy: jest.fn() };
     const consumer = new SagaCommandConsumer(
       client as unknown as SQSClient,
@@ -30,9 +31,53 @@ describe('SagaCommandConsumer', () => {
     );
 
     consumer.onModuleInit();
-    consumer.onModuleDestroy();
+    await consumer.onModuleDestroy();
 
     expect(client.send).not.toHaveBeenCalled();
+    expect(client.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('finishes the in-flight poll before closing the client', async () => {
+    const client = {
+      send: jest.fn((sent: unknown) =>
+        sent instanceof ReceiveMessageCommand
+          ? new Promise((resolve) =>
+              setTimeout(
+                () =>
+                  resolve({
+                    Messages: [
+                      {
+                        Body: JSON.stringify(command),
+                        ReceiptHandle: 'receipt',
+                      },
+                    ],
+                  }),
+                10,
+              ),
+            )
+          : Promise.resolve({}),
+      ),
+      destroy: jest.fn(),
+    };
+    const handler = { processSagaCommand: jest.fn().mockResolvedValue({}) };
+    const consumer = new SagaCommandConsumer(
+      client as unknown as SQSClient,
+      handler as never,
+      new ConfigService({
+        sqs: {
+          enabled: true,
+          commandQueueUrl: 'commands',
+          resultsQueueUrl: 'results',
+        },
+      }),
+    );
+
+    consumer.onModuleInit();
+    const closing = consumer.onModuleDestroy();
+    expect(client.destroy).not.toHaveBeenCalled();
+    await closing;
+
+    expect(handler.processSagaCommand).toHaveBeenCalledWith(command);
     expect(client.destroy).toHaveBeenCalledTimes(1);
   });
 
