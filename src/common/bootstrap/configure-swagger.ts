@@ -5,18 +5,17 @@ export function configureSwagger(app: INestApplication): void {
   const config = new DocumentBuilder()
     .setTitle('Billing Service')
     .setDescription(
-      'Dono de orçamento, aprovação e pagamento. A cobrança será integrada ao Mercado Pago.',
+      'Os comandos da Saga são consumidos por SQS e não são endpoints HTTP. As rotas HTTP internas de comando estão marcadas como legadas; a consulta de pagamento com x-saga-token permanece síncrona para a entrega da OS.',
     )
     .setVersion('1.0')
-    .addBearerAuth(
+    .addApiKey(
       {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        description:
-          'JWT emitido pela Lambda de CPF ou pelo login administrativo.',
+        type: 'apiKey',
+        in: 'header',
+        name: 'x-saga-token',
+        description: 'Token para as rotas HTTP internas legadas do Billing.',
       },
-      'JWT-auth',
+      'SagaToken',
     )
     .build();
 

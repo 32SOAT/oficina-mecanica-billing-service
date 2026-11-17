@@ -18,5 +18,6 @@ import { PagamentoEntity } from './pagamento.entity';
     MercadoPagoClient,
     { provide: MERCADO_PAGO_ORDERS, useExisting: MercadoPagoClient },
   ],
+  exports: [CaixaService],
 })
 export class CaixaModule {}

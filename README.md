@@ -25,6 +25,20 @@ Um pagamento que continua `PENDENTE` é consultado de novo no Mercado Pago a cad
 
 Postgres `oficina_billing` neste repositório, porta **5433**. O schema é criado na subida da aplicação. Não há conexão com o banco da OS nem com o da execução.
 
+No Kubernetes, `kubernetes/base` cria `oficina-billing-postgres` com PVC, credenciais e política de rede próprios. O serviço usa apenas esse banco; nenhuma credencial da OS é compartilhada.
+
+## Deploy Kubernetes independente
+
+Os recursos AWS próprios e a ordem de configuração estão em [infra/aws/README.md](infra/aws/README.md). Cada ambiente tem state Terraform e ECR separados; execute o apply apenas após revisão da infraestrutura.
+
+`.github/workflows/deploy.yml` valida lint/cobertura/build, publica a imagem no ECR e aplica os manifests em `homolog`/`main` quando `DEPLOY_ENABLED=true` nas variables do repositório. Configure `AWS_REGION`, `AWS_ACCOUNT_ID`, `EKS_CLUSTER_NAME`, `DEPLOY_ROLE_ARN`, `ECR_REPOSITORY_URL`, `SQS_COMMANDS_QUEUE_URL` e `SQS_RESULTS_QUEUE_URL` como variables. Configure `POSTGRES_USER`, `POSTGRES_PASSWORD` e `SAGA_TOKEN` como secrets; as credenciais de teste do Mercado Pago são opcionais para subir a API, mas necessárias para cobrar via checkout atual. ECR, roles de deploy e Pod Identity, cluster, namespace e filas são pré-requisitos. A role Pod Identity vinculada ao ServiceAccount `oficina-billing` deve ter acesso somente às filas do Billing. O Service interno continua `ClusterIP`; o deploy também cria `oficina-billing-checkout` com NLB e publica `/oficina/<ambiente>/services/billing-checkout-nlb-hostname` no SSM após verificar o health externo. O API Gateway da plataforma encaminha somente checkout e cobrança a esse NLB.
+
+## Mensageria da Saga
+
+O worker SQS aceita geração/aprovação/reprovação de orçamento e abertura de pagamento pendente. `commandId`, alteração do orçamento/pagamento e resultado ficam persistidos na mesma transação Postgres. Em uma redelivery ele reutiliza o resultado gravado; só confirma a mensagem depois de publicar o resultado na fila da OS. Mensagens inválidas seguem para a DLQ pela política de redrive.
+
+O `.env.example` inclui endpoint, região e URLs das filas FIFO. Para iniciar o worker, defina `SQS_WORKER_ENABLED=true` depois de copiar o arquivo para `.env` e confirmar que filas, DLQs e permissões já estão disponíveis. Localmente, as filas são criadas pelo Floci no compose do OS Service (`docker compose up -d db floci`, dentro de `oficina-mecanica-os-service`). Em AWS, configure as URLs de saída do Terraform, deixe `SQS_ENDPOINT_URL` vazio/ausente e use a role IAM do serviço. A OS publica comandos pela outbox SQS; a consulta síncrona do pagamento usada na entrega continua sendo HTTP. Consulte o [guia de operação da Saga](../oficina-mecanica-os-service/docs/operacao-saga-sqs.md) para a ordem de rollout, reconciliação e redrive seguro.
+
 ## Execução local
 
 ```bash
@@ -39,4 +53,6 @@ npm run start:dev
 - Checkout: `GET /api/v1/pagamentos/:osId/checkout`
 - Cobrança, chamada pelo formulário: `POST /api/v1/pagamentos/:osId/cobrar`
 
-Preencha `MERCADOPAGO_ACCESS_TOKEN` e `MERCADOPAGO_PUBLIC_KEY` no `.env` com as credenciais de teste. O Access Token de teste começa com `APP_USR`. As chamadas feitas pela OS continuam enviando o header `x-saga-token: oficina-local`. A página de pagamento não usa esse header.
+Preencha `MERCADOPAGO_ACCESS_TOKEN` e `MERCADOPAGO_PUBLIC_KEY` no `.env` com as credenciais de teste. O Access Token de teste começa com `APP_USR`. A consulta síncrona de pagamento feita pela OS durante a entrega envia `x-saga-token: oficina-local`. Os comandos da Saga chegam pelo worker SQS; a página de pagamento não usa esse header.
+
+Para o BDD distribuído, `MERCADOPAGO_API_BASE_URL` permite apontar o cliente HTTP para um mock local do provedor; o padrão continua `https://api.mercadopago.com`. A variável não é configurada pelo deploy de produção. A suíte completa e o CI estão descritos no README da OS.
