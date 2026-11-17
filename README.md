@@ -33,6 +33,12 @@ Os recursos AWS próprios e a ordem de configuração estão em [infra/aws/READM
 
 `.github/workflows/deploy.yml` valida lint/cobertura/build, publica a imagem no ECR e aplica os manifests em `homolog`/`main` quando `DEPLOY_ENABLED=true` nas variables do repositório. Configure `AWS_REGION`, `AWS_ACCOUNT_ID`, `EKS_CLUSTER_NAME`, `DEPLOY_ROLE_ARN`, `ECR_REPOSITORY_URL`, `SQS_COMMANDS_QUEUE_URL` e `SQS_RESULTS_QUEUE_URL` como variables. Configure `POSTGRES_USER`, `POSTGRES_PASSWORD` e `SAGA_TOKEN` como secrets; as credenciais de teste do Mercado Pago são opcionais para subir a API, mas necessárias para cobrar via checkout atual. ECR, roles de deploy e Pod Identity, cluster, namespace e filas são pré-requisitos. A role Pod Identity vinculada ao ServiceAccount `oficina-billing` deve ter acesso somente às filas do Billing. O Service interno continua `ClusterIP`; o deploy também cria `oficina-billing-checkout` com NLB e publica `/oficina/<ambiente>/services/billing-checkout-nlb-hostname` no SSM após verificar o health externo. O API Gateway da plataforma encaminha somente checkout e cobrança a esse NLB.
 
+### Deploy automatizado em cluster temporário
+
+[![Deploy Kubernetes (kind)](https://github.com/32SOAT/oficina-mecanica-billing-service/actions/workflows/deploy-kind.yml/badge.svg)](https://github.com/32SOAT/oficina-mecanica-billing-service/actions/workflows/deploy-kind.yml)
+
+`.github/workflows/deploy-kind.yml` roda em todo PR e em `homolog`/`main`, sem depender da AWS. Ele executa o lint e os testes com cobertura, constrói a imagem, cria um cluster Kubernetes com `kind`, aplica `kubernetes/overlays/minikube`, espera o rollout e confere o health de dentro do cluster. O consumidor SQS fica desligado nesse job, porque as filas ficam no overlay do OS Service. Exemplo: [execução de 17/11/2026](https://github.com/32SOAT/oficina-mecanica-billing-service/actions/runs/44022564333).
+
 ## Mensageria da Saga
 
 A Saga é orquestrada pelo OS Service, e este serviço é um participante: recebe comandos pela fila, aplica e devolve o resultado. A justificativa da escolha está no [README do OS Service](https://github.com/32SOAT/oficina-mecanica-os-service#por-que-saga-orquestrada) e na ADR 001 daquele repositório.
