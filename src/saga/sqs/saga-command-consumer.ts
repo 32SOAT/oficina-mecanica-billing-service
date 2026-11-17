@@ -17,12 +17,13 @@ import { SqsConfig } from './sqs.config';
 import { SQS_CLIENT } from './sqs-client.module';
 import { Inject } from '@nestjs/common';
 import { isSagaCommandMessage, SagaCommandMessage } from '../saga-message';
+import { traceSagaMessage } from './saga-trace';
 
 @Injectable()
 export class SagaCommandConsumer implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SagaCommandConsumer.name);
   private running = false;
-  private abortController?: AbortController;
+  private polling?: Promise<void>;
 
   constructor(
     @Inject(SQS_CLIENT) private readonly client: SQSClient,
@@ -37,13 +38,13 @@ export class SagaCommandConsumer implements OnModuleInit, OnModuleDestroy {
       throw new Error('URLs SQS do Billing são obrigatórias com worker ativo');
     }
     this.running = true;
-    this.abortController = new AbortController();
-    void this.consume(sqs);
+    this.polling = this.consume(sqs);
   }
 
-  onModuleDestroy(): void {
+  // An aborted long poll stays open on the queue and takes the next message.
+  async onModuleDestroy(): Promise<void> {
     this.running = false;
-    this.abortController?.abort();
+    await this.polling;
     this.client.destroy();
   }
 
@@ -95,11 +96,12 @@ export class SagaCommandConsumer implements OnModuleInit, OnModuleDestroy {
             WaitTimeSeconds: 20,
             VisibilityTimeout: 60,
           }),
-          { abortSignal: this.abortController?.signal },
         );
         for (const message of response.Messages ?? []) {
           try {
-            await this.processMessage(message);
+            await traceSagaMessage('saga.command', message, () =>
+              this.processMessage(message),
+            );
           } catch {
             this.logger.warn(
               `Falha ao processar comando SQS; mensagem será repetida. messageId=${message.MessageId ?? 'desconhecido'}`,
